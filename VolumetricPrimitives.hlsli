@@ -48,10 +48,8 @@ float CalculateMetaballPotential(in float3 position, in Metaball blob, out float
         // but this one gives f(0) = 0, f(radius) = 1, so we use the distance to radius instead.
         d = blob.radius - d;
 
-        float r = blob.radius;
-        return 6 * (d*d*d*d*d) / (r*r*r*r*r)
-            - 15 * (d*d*d*d) / (r*r*r*r)
-            + 10 * (d*d*d) / (r*r*r);
+        float r = d / blob.radius;
+        return r * r * r * (r * (r * 6 - 15) + 10);
     }
     return 0;
 }
@@ -72,17 +70,40 @@ float CalculateMetaballsPotential(in float3 position, in Metaball blobs[N_METABA
     return sumFieldPotential;
 }
 
+float3 CalculateMetaballNormal(in float3 position, in Metaball blob)
+{
+    float3 direction = position - blob.center;
+    float distance = length(direction);
+
+    if (distance < blob.radius)
+    {
+        float d = blob.radius - distance;
+        float r = d / blob.radius;
+        float len = 30 / (d * distance) * r * r * r * (r - 1) * (r - 1);
+        return direction * len;
+    }
+    return float3(0, 0, 0);
+}
+
 // Calculate a normal via central differences.
 float3 CalculateMetaballsNormal(in float3 position, in Metaball blobs[N_METABALLS], in UINT nActiveMetaballs)
 {
-    float e = 0.5773 * 0.00001;
-    return normalize(float3(
-        CalculateMetaballsPotential(position + float3(-e, 0, 0), blobs, nActiveMetaballs) -
-        CalculateMetaballsPotential(position + float3(e, 0, 0), blobs, nActiveMetaballs),
-        CalculateMetaballsPotential(position + float3(0, -e, 0), blobs, nActiveMetaballs) -
-        CalculateMetaballsPotential(position + float3(0, e, 0), blobs, nActiveMetaballs),
-        CalculateMetaballsPotential(position + float3(0, 0, -e), blobs, nActiveMetaballs) -
-        CalculateMetaballsPotential(position + float3(0, 0, e), blobs, nActiveMetaballs)));
+    //float e = 0.5773 * 0.00001;
+    //return normalize(float3(
+    //    CalculateMetaballsPotential(position + float3(-e, 0, 0), blobs, nActiveMetaballs) -
+    //    CalculateMetaballsPotential(position + float3(e, 0, 0), blobs, nActiveMetaballs),
+    //    CalculateMetaballsPotential(position + float3(0, -e, 0), blobs, nActiveMetaballs) -
+    //    CalculateMetaballsPotential(position + float3(0, e, 0), blobs, nActiveMetaballs),
+    //    CalculateMetaballsPotential(position + float3(0, 0, -e), blobs, nActiveMetaballs) -
+    //    CalculateMetaballsPotential(position + float3(0, 0, e), blobs, nActiveMetaballs)
+    //));
+
+    float3 norm = { 0, 0, 0 };
+    for (UINT j = 0; j < nActiveMetaballs; ++j)
+    {
+        norm += CalculateMetaballNormal(position, blobs[j]);
+    }
+    return normalize(norm);
 }
 
 void InitializeAnimatedMetaballs(out Metaball blobs[N_METABALLS], in float elapsedTime, in float cycleDuration)
@@ -149,13 +170,12 @@ void InitializeAnimatedMetaballs(out Metaball blobs[N_METABALLS], in float elaps
 #else //N_METABALLS == 3
     float3 keyFrameCenters[N_METABALLS][2] =
     {
-        { float3(-0.7, 0, 0),float3(0.7,0, 0) },
-        { float3(0.7 , 0, 0), float3(-0.7, 0, 0) },
-        { float3(0, 0, 0),   float3(0, 0, 0) }
-         
+        { float3(-0.5, 0, 0), float3( 0.5, 0, 0) },
+        { float3( 0.5, 0, 0), float3(-0.5, 0, 0) },   
+        //{ float3(0, 0, 0), float3(0, 0, 0)},
     };
     // Metaball field radii of max influence
-    float radii[N_METABALLS] = { 0.35, 0.35, 0.25};
+    float radii[N_METABALLS] = { 0.35, 0.35,/* 0.2*/ };
 #endif
 
     // Calculate animated metaball center positions.
@@ -199,7 +219,7 @@ void FindIntersectingMetaballs(in Ray ray, out float tmin, out float tmax, inout
 bool RayMetaballsIntersectionTest(in Ray ray, out float thit, out ProceduralPrimitiveAttributes attr, in float elapsedTime)
 {
     Metaball blobs[N_METABALLS];
-    InitializeAnimatedMetaballs(blobs, elapsedTime, 12.0f);
+    InitializeAnimatedMetaballs(blobs, elapsedTime, 24.0f);
     
     float tmin, tmax;   // Ray extents to first and last metaball intersections.
     UINT nActiveMetaballs = 0;  // Number of metaballs's that the ray intersects.
@@ -225,7 +245,7 @@ bool RayMetaballsIntersectionTest(in Ray ray, out float thit, out ProceduralPrim
             fieldPotentials[j] = CalculateMetaballPotential(position, blobs[j], distance);
             sumFieldPotential += fieldPotentials[j];
          }
-    bool inside = false;
+    bool fromInside = sumFieldPotential > Threshold;
     
 
     while (iStep++ < MAX_STEPS)
@@ -250,22 +270,30 @@ bool RayMetaballsIntersectionTest(in Ray ray, out float thit, out ProceduralPrim
         // Threshold - valid range is (0, 1>, the larger the threshold the smaller the blob.
 
         // Have we crossed the isosurface?
-        if (!inside && sumFieldPotential >= Threshold)
+        if (!fromInside && sumFieldPotential > Threshold)
         {
             float3 normal = CalculateMetaballsNormal(position, blobs, nActiveMetaballs);
             if (IsAValidHit(ray, t, normal))
+            //if (IsInRange(t, RayTMin(), RayTCurrent()))
             {
                 thit = t;
                 attr.normal = normal;
                 return true;
             }
         }
-        if (inside && sumFieldPotential <= Threshold)
+        if (fromInside && sumFieldPotential <= Threshold)
         {
             float3 normal = CalculateMetaballsNormal(position, blobs, nActiveMetaballs);
-            thit = t;
-            attr.normal = normal;
-            return true;
+            if (IsAValidHit(ray, t, normal))
+            //if (IsInRange(t, RayTMin(), RayTCurrent()))
+            {
+                thit = t;
+                attr.normal = normal;
+                return true;
+            }
+            //thit = t;
+            //attr.normal = normal;
+            //return true;    
         }
         t += minTStep;
     }

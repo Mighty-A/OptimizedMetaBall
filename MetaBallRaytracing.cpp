@@ -143,7 +143,7 @@ void MetaBallRaytracing::UpdateAABBPrimitiveAttributes(float animationTime)
     // Volumetric primitives.
     {
         using namespace VolumetricPrimitive;
-        SetTransformForAABB(offset + Metaballs, mScale15, mRotation);
+        SetTransformForAABB(offset + Metaballs, mScale15, mIdentity);
         offset += VolumetricPrimitive::Count;
     }
 
@@ -199,7 +199,7 @@ void MetaBallRaytracing::InitializeScene()
         XMFLOAT4 yellow = XMFLOAT4(1.0f, 1.0f, 0.5f, 1.0f);
         XMFLOAT4 blue = XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f);
 
-        m_metaBallMeterialCB = { blue, 1.0, 0.0, 0.9, 0.7, 50.0, 1.0 };
+        m_metaBallMeterialCB = { yellow, 1.0, 0.0, 0.9, 0.7, 50.0, 1.0 };
         UINT offset = 0;
         // Analytic primitives.
         {
@@ -212,7 +212,7 @@ void MetaBallRaytracing::InitializeScene()
         // Volumetric primitives.
         {
             using namespace VolumetricPrimitive;
-            SetAttributes(offset + Metaballs, ChromiumReflectance, 1.0f, 0.0f);
+            SetAttributes(offset + Metaballs, WaterReflectance, 1.0f, 1.0f);
             offset += VolumetricPrimitive::Count;
         }
 
@@ -512,7 +512,7 @@ void MetaBallRaytracing::CreateRaytracingPipelineStateObject()
     globalRootSignature->SetRootSignature(m_raytracingGlobalRootSignature.Get());
 
     // Pipeline config
-    // Defines the maximum TraceRay() recursion depth.
+    // Defines the maximum  () recursion depth.
     auto pipelineConfig = raytracingPipeline.CreateSubobject<CD3DX12_RAYTRACING_PIPELINE_CONFIG_SUBOBJECT>();
     // PERFOMANCE TIP: Set max recursion depth as low as needed
     // as drivers may apply optimization strategies for low recursion depths.
@@ -749,13 +749,13 @@ AccelerationStructureBuffers MetaBallRaytracing::BuildBottomLevelAS(const vector
     // Create a scratch buffer.
     AllocateUAVBuffer(device, bottomLevelPrebuildInfo.ScratchDataSizeInBytes, &scratch, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, L"ScratchResource");
 
-    // Allocate resources for acceleration structures.
-    // Acceleration structures can only be placed in resources that are created in the default heap (or custom heap equivalent). 
-    // Default heap is OK since the application doesn’t need CPU read/write access to them. 
-    // The resources that will contain acceleration structures must be created in the state D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, 
-    // and must have resource flag D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS. The ALLOW_UNORDERED_ACCESS requirement simply acknowledges both: 
-    //  - the system will be doing this type of access in its implementation of acceleration structure builds behind the scenes.
-    //  - from the app point of view, synchronization of writes/reads to acceleration structures is accomplished using UAV barriers.
+ //Allocate resources for acceleration structures.
+ //Acceleration structures can only be placed in resources that are created in the default heap (or custom heap equivalent). 
+ //Default heap is OK since the application doesn't need CPU read/write access to them. 
+ //The resources that will contain acceleration structures must be created in the state D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, 
+ //and must have resource flag D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS. The ALLOW_UNORDERED_ACCESS requirement simply acknowledges both: 
+ // - the system will be doing this type of access in its implementation of acceleration structure builds behind the scenes.
+ // - from the app point of view, synchronization of writes/reads to acceleration structures is accomplished using UAV barriers.
     {
         D3D12_RESOURCE_STATES initialResourceState = D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
         AllocateUAVBuffer(device, bottomLevelPrebuildInfo.ResultDataMaxSizeInBytes, &bottomLevelAS, initialResourceState, L"BottomLevelAccelerationStructure");
@@ -855,7 +855,7 @@ AccelerationStructureBuffers MetaBallRaytracing::BuildTopLevelAS(AccelerationStr
 
     // Allocate resources for acceleration structures.
     // Acceleration structures can only be placed in resources that are created in the default heap (or custom heap equivalent). 
-    // Default heap is OK since the application doesn’t need CPU read/write access to them. 
+    // Default heap is OK since the application doesn't need CPU read/write access to them. 
     // The resources that will contain acceleration structures must be created in the state D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, 
     // and must have resource flag D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS. The ALLOW_UNORDERED_ACCESS requirement simply acknowledges both: 
     //  - the system will be doing this type of access in its implementation of acceleration structure builds behind the scenes.
@@ -1008,7 +1008,7 @@ void MetaBallRaytracing::BuildShaderTables()
     | --------------------------------------------------------------------
     **********************************************************************/
 
-     // RayGen shader table.
+    // RayGen shader table.
     {
         UINT numShaderRecords = 1;
         UINT shaderRecordSize = shaderIDSize; // No root arguments

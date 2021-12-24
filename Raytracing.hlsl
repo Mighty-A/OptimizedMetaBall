@@ -95,6 +95,33 @@ float4 CalculatePhongLighting(in float4 albedo, in float3 normal, in bool isInSh
 //***************************************************************************
 
 // Trace a radiance ray into the scene and returns a shaded color.
+float4 TraceRadianceRay(in Ray ray, in UINT currentRayRecursionDepth, in RAY_FLAG FRONT_BACK)
+{
+    if (currentRayRecursionDepth >= MAX_RAY_RECURSION_DEPTH)
+    {
+        return float4(0, 0, 0, 0);
+    }
+
+    // Set the ray's extents.
+    RayDesc rayDesc;
+    rayDesc.Origin = ray.origin;
+    rayDesc.Direction = ray.direction;
+    // Set TMin to a zero value to avoid aliasing artifacts along contact areas.
+    // Note: make sure to enable face culling so as to avoid surface face fighting.
+    rayDesc.TMin = 0.000;
+    rayDesc.TMax = 10000;
+    RayPayload rayPayload = { float4(0, 0, 0, 0), currentRayRecursionDepth + 1};
+    TraceRay(g_scene,
+        FRONT_BACK,
+        TraceRayParameters::InstanceMask,
+        TraceRayParameters::HitGroup::Offset[RayType::Radiance],
+        TraceRayParameters::HitGroup::GeometryStride,
+        TraceRayParameters::MissShader::Offset[RayType::Radiance],
+        rayDesc, rayPayload);
+
+    return rayPayload.color;
+}
+                
 float4 TraceRadianceRay(in Ray ray, in UINT currentRayRecursionDepth)
 {
     if (currentRayRecursionDepth >= MAX_RAY_RECURSION_DEPTH)
@@ -211,6 +238,7 @@ void MyClosestHitShader_Triangle(inout RayPayload rayPayload, in BuiltInTriangle
     {
         // Trace a reflection ray.
         Ray reflectionRay = { HitWorldPosition(), reflect(WorldRayDirection(), triangleNormal) };
+        // 不能改，否则地板寄了
         float4 reflectionColor = TraceRadianceRay(reflectionRay, rayPayload.recursionDepth);
 
         float3 fresnelR = FresnelReflectanceSchlick(WorldRayDirection(), triangleNormal, l_materialCB.albedo.xyz);
@@ -234,43 +262,99 @@ void MyClosestHitShader_AABB(inout RayPayload rayPayload, in ProceduralPrimitive
     // PERFORMANCE TIP: it is recommended to minimize values carry over across TraceRay() calls. 
     // Therefore, in cases like retrieving HitWorldPosition(), it is recomputed every time.
 
+    
     // Shadow component.
     // Trace a shadow ray.
     float3 hitPosition = HitWorldPosition();
     Ray shadowRay = { hitPosition, normalize(g_sceneCB.lightPosition.xyz - hitPosition) };
     bool shadowRayHit = TraceShadowRayAndReportIfHit(shadowRay, rayPayload.recursionDepth);
-
-	float3 fresnelR = FresnelReflectanceSchlick(WorldRayDirection(), attr.normal, l_materialCB.albedo.xyz);
-    // Reflected component.
-    float4 reflectedColor = float4(0, 0, 0, 0);
-    if (l_materialCB.reflectanceCoef > 0.001)
-    {
-        // Trace a reflection ray.
-        Ray reflectionRay = { HitWorldPosition(), reflect(WorldRayDirection(), attr.normal) };
-        float4 reflectionColor = TraceRadianceRay(reflectionRay, rayPayload.recursionDepth);
-
-
-        reflectedColor = l_materialCB.reflectanceCoef * float4(fresnelR, 1) * reflectionColor;
-    }
     
-    // refraction
-    float4 refractionColor = float4(0, 0, 0, 0);    
-    if (l_materialCB.refractionCoef > 0.001) {
-        // Trace a refraction ray.
-        float refractivity = 1.33;
-        bool inside = dot(WorldRayDirection(), attr.normal) > 0;
-        
-        float eta = inside ? refractivity : 1.0f / refractivity;
-        float3 tempNormal = attr.normal * (inside ? -1.0f: 1.0f);
-        float3 newDire = refract(WorldRayDirection(), tempNormal, eta);
-        if (length(newDire) > 0) {
-            Ray refractionRay = { HitWorldPosition(), newDire};
+    bool inside = dot(WorldRayDirection(), attr.normal) > 0;
+    float4 refractionColor = float4(0, 0, 0, 0); 
+    float4 reflectedColor = float4(0, 0, 0, 0);
+    // internal 
+    if (inside)
+    {
+                        
+        float eta = 1.33;
+        float biasStep = 0.00001;                       
+        float3 normal = - attr.normal;
+        float3 refractDirect = refract(WorldRayDirection(), normal, eta);
+        // total internal reflection
+        if (length(refractDirect) == 0)
+        {              
+            if (l_materialCB.reflectanceCoef > 0.001)
+            {
+                // Trace a reflection ray.
+                float3 reflectDirect = reflect(WorldRayDirection(), normal);
+                Ray reflectionRay = { HitWorldPosition() + biasStep * reflectDirect,  reflectDirect};
+                float4 reflectionColor = TraceRadianceRay(reflectionRay, rayPayload.recursionDepth, RAY_FLAG_CULL_BACK_FACING_TRIANGLES);
 
-            refractionColor = TraceRadianceRay(refractionRay, rayPayload.recursionDepth); // add extra trace for entering medium
-        
-            refractionColor = l_materialCB.refractionCoef * /*float4(float3(1, 1, 1) - fresnelR, 1) */  refractionColor;
+                reflectedColor = l_materialCB.reflectanceCoef  * reflectionColor;
+            }
         }
+        // not total internal reflection
+        else
+        {
+            // Trace a reflection ray.
+            float3 fresnelR = TotalFresnelReflectanceSchlick(WorldRayDirection(), normal, l_materialCB.albedo.xyz);
+ 
+            if (l_materialCB.reflectanceCoef > 0.001)
+            {
+                // Trace a reflection ray.
+                float3 reflectDirect = reflect(WorldRayDirection(), normal);
+                Ray reflectionRay = { HitWorldPosition() + biasStep * reflectDirect,  reflectDirect};
+                float4 reflectionColor = TraceRadianceRay(reflectionRay, rayPayload.recursionDepth, RAY_FLAG_CULL_BACK_FACING_TRIANGLES);
+
+                reflectedColor = l_materialCB.reflectanceCoef * float4(fresnelR, 1) * reflectionColor;
+            }
+                            
+            // refraction
+       
+            if (l_materialCB.refractionCoef > 0.001) 
+            {
+                Ray refractionRay = { HitWorldPosition() + biasStep * refractDirect, refractDirect};
+
+                refractionColor = TraceRadianceRay(refractionRay, rayPayload.recursionDepth, RAY_FLAG_CULL_BACK_FACING_TRIANGLES); // add extra trace for entering medium
+        
+                refractionColor = l_materialCB.refractionCoef * float4(1 - fresnelR, 1) * refractionColor;
+            }        
+        }
+                        
+    } 
+    // external
+    else
+    {
+        float eta = 1.0 / 1.33;
+        float biasStep = 0.0001; 
+        float3 normal = attr.normal;
+        float3 refractDirect = refract(WorldRayDirection(), normal, eta);
+                        
+        // Trace a reflection ray.
+        float3 fresnelR = FresnelReflectanceSchlick(WorldRayDirection(), normal, l_materialCB.albedo.xyz);
+ 
+        if (l_materialCB.reflectanceCoef > 0.001)
+        {
+            // Trace a reflection ray.
+            float3 reflectDirect = reflect(WorldRayDirection(), normal);
+            Ray reflectionRay = { HitWorldPosition() + biasStep * reflectDirect,  reflectDirect};
+            float4 reflectionColor = TraceRadianceRay(reflectionRay, rayPayload.recursionDepth, RAY_FLAG_CULL_FRONT_FACING_TRIANGLES);
+
+            reflectedColor = l_materialCB.reflectanceCoef * float4(fresnelR, 1) * reflectionColor;
+        }
+                            
+        // refraction
+       
+        if (l_materialCB.refractionCoef > 0.001) 
+        {
+            Ray refractionRay = { HitWorldPosition() + biasStep * refractDirect, refractDirect};
+
+            refractionColor = TraceRadianceRay(refractionRay, rayPayload.recursionDepth, RAY_FLAG_CULL_FRONT_FACING_TRIANGLES); // add extra trace for entering medium
+        
+            refractionColor = l_materialCB.refractionCoef * float4(1 - fresnelR, 1) * refractionColor;
+        }       
     }
+
     // Calculate final color.
     float4 phongColor = CalculatePhongLighting(l_materialCB.albedo, attr.normal, shadowRayHit, l_materialCB.diffuseCoef, l_materialCB.specularCoef, l_materialCB.specularPower);
     float4 color = phongColor + reflectedColor + refractionColor;

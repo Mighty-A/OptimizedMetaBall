@@ -30,7 +30,7 @@ typedef UINT16 Index;
 #endif
 
 // Number of metaballs to use within an AABB.
-#define N_METABALLS 3  // = {3, 9, 27, 125}
+#define N_METABALLS 2  // = {3, 9, 27, 125}
 
 // Limitting calculations only to metaballs a ray intersects can speed up raytracing
 // dramatically particularly when there is a higher number of metaballs used. 
@@ -49,7 +49,7 @@ typedef UINT16 Index;
 
 // PERFORMANCE TIP: Set max recursion depth as low as needed
 // as drivers may apply optimization strategies for low recursion depths.
-#define MAX_RAY_RECURSION_DEPTH 3   // ~ primary rays + reflections + shadow rays from reflected geometry.
+#define MAX_RAY_RECURSION_DEPTH 10   // ~ primary rays + reflections + shadow rays from reflected geometry.
 
 
 struct ProceduralPrimitiveAttributes
