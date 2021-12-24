@@ -64,13 +64,12 @@ struct MetaBallPrimitiveAttributes
 };
 
 
-#define MAX_INDEX_BUFFER_LENGTH 10
+#define MAX_INDEX_BUFFER_LENGTH 125 // number of balls  
 struct RayPayload
 {
     XMFLOAT4 color;
     UINT   recursionDepth;
-    UINT   indexCount;
-    UINT   indexBuffer[MAX_INDEX_BUFFER_LENGTH];
+    UINT   bit[MAX_INDEX_BUFFER_LENGTH / 32 + 1] ;
 };
 
 struct ShadowRayPayload

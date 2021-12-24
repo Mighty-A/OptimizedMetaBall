@@ -146,17 +146,24 @@ float4 TraceRadianceRay(in Ray ray, in UINT currentRayRecursionDepth)
     // Note: make sure to enable face culling so as to avoid surface face fighting.
     rayDesc.TMin = 0.000;
     rayDesc.TMax = 10000;
-    RayPayload rayPayload = { float4(0, 0, 0, 0), currentRayRecursionDepth + 1, 0,
-#if MAX_INDEX_BUFFER_LENGTH >= 10
-    0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
+    RayPayload rayPayload = { float4(0, 0, 0, 0), currentRayRecursionDepth + 1,
+    
+#if MAX_INDEX_BUFFER_LENGTH > 0
+    0,
 #endif
-#if MMAX_INDEX_BUFFER_LENGTH >=30
-    0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
-#endif/*
+#if MAX_INDEX_BUFFER_LENGTH > 32
+    0,
+#endif 
+#if MAX_INDEX_BUFFER_LENGTH > 64
+    0,
+#endif 
+#if MAX_INDEX_BUFFER_LENGTH > 96
+    0, 
+#endif
+#if MAX_INDEX_BUFFER_LENGTH > 128
+    0,
+#endif
+   /*
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
@@ -246,8 +253,11 @@ void MyRaygenShader()
 [shader("closesthit")]
 void MyClosestHitShader_Triangle(inout RayPayload rayPayload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    
-    if (rayPayload.indexCount != 0) {
+    UINT sum = 0;
+    for (UINT i = 0; i < MAX_INDEX_BUFFER_LENGTH / 32 + 1; i += 1U) {
+        sum += rayPayload.bit[i];
+    }
+    if (sum != 0) {
         Ray localray;
         localray.direction = WorldRayDirection();
         localray.origin = WorldRayOrigin();
@@ -384,7 +394,11 @@ void MyClosestHitShader_AABB(inout RayPayload rayPayload, in ProceduralPrimitive
 [shader("closesthit")]
 void MyClosestHitShader_MetaBallPrimitive(inout RayPayload rayPayload, in ProceduralPrimitiveAttributes attr)
 {
-  if (rayPayload.indexCount != 0) {
+    UINT sum = 0;
+    for (UINT i = 0; i < MAX_INDEX_BUFFER_LENGTH / 32 + 1; i += 1U) {
+        sum += rayPayload.bit[i];
+    }
+    if (sum != 0) {
         Ray localray;
         localray.direction = WorldRayDirection();
         localray.origin = WorldRayOrigin();
@@ -428,7 +442,11 @@ void MyMissShader(inout RayPayload rayPayload)
 {
     float4 backgroundColor = float4(BackgroundColor);
     
-    if (rayPayload.indexCount != 0) {
+    UINT sum = 0;
+    for (UINT i = 0; i < MAX_INDEX_BUFFER_LENGTH / 32 + 1; i += 1U) {
+        sum += rayPayload.bit[i];
+    }
+    if (sum != 0) {
         Ray localray;
         localray.direction = WorldRayDirection();
         localray.origin = WorldRayOrigin();
@@ -600,9 +618,7 @@ void MyIntersectionShader_MetaBallPrimitive()
 void MyAnyhitShader_MetaBallPrimitive(inout RayPayload payload, in MetaBallPrimitiveAttributes attr)
 {
     
-    if (payload.indexCount < MAX_INDEX_BUFFER_LENGTH) {
-        payload.indexBuffer[payload.indexCount++] = attr.index;
-    }
+    payload.bit[(int)attr.index / 32] |= (1U << ((int)attr.index % 32));
         IgnoreHit();
     // give control back to the Intersection Shader
 }

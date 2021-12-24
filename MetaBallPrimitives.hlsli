@@ -4,11 +4,12 @@
 #include "RaytracingShaderHelper.hlsli"
 
 #define INTERVAL_REFINEMENT
+#define MAX_METABALLS_PER_CAL 30
 // MetaBall resources
 					StructuredBuffer<Metaball> g_metaballs : register(t4, space0);
 					
 // Calculate field potential from all active metaballs.
-float CalculateMetaballsPotential(in float3 position, in Metaball blobs[MAX_INDEX_BUFFER_LENGTH], in UINT nActiveMetaballs)
+float CalculateMetaballsPotential(in float3 position, in Metaball blobs[MAX_METABALLS_PER_CAL], in UINT nActiveMetaballs)
 {
     float sumFieldPotential = 0;
     for (UINT j = 0; j < nActiveMetaballs; j++)
@@ -36,7 +37,7 @@ bool RayMetaballIntersectionTest(in Ray localRay, in MetaBall metaBall, inout fl
 	return false;
 }
 // Calculate a normal via central differences.
-float3 CalculateMetaballNormal(in float3 position, in Metaball blobs[MAX_INDEX_BUFFER_LENGTH], in UINT nActiveMetaballs)
+float3 CalculateMetaballNormal(in float3 position, in Metaball blobs[MAX_METABALLS_PER_CAL], in UINT nActiveMetaballs)
 {
     float e = 0.5773 * 0.00001;
     return normalize(float3(
@@ -51,16 +52,20 @@ bool RayMetaBallPostIntersectionTest(in Ray localRay, in RayPayload payload, out
 {
 	const float3 Translation = float3(0.0f, 1.0f, 0.0f);
 
-	UINT numOfMetaBalls = payload.indexCount;
+	UINT numOfMetaBalls = 0;
 	float tmin = INFINITY;
 	float tmax = -INFINITY;
 	uint j = 0;
 	float smin = INFINITY;
 	float start = RayTMin();
-	MetaBall metaBalls[MAX_INDEX_BUFFER_LENGTH];
+
+	MetaBall metaBalls[MAX_METABALLS_PER_CAL];
 	const float innerRatio = 0.74f;
-	for (UINT i = 0; i < numOfMetaBalls; i++) {
-		MetaBall m = g_metaballs[payload.indexBuffer[i]];
+	for (int i = 0; i < MAX_INDEX_BUFFER_LENGTH; i++) {
+		if (j >= MAX_METABALLS_PER_CAL || !(payload.bit[i / 32] & (1U << (i % 32)))){
+			continue;
+		}
+		MetaBall m = g_metaballs[i];
 		m.center += Translation;
 		//metaBalls[i].center = mul(WorldToObject3x4(), float4(metaBalls[i].center, 1.0f));
 		//metaBalls[i].radius = length(mul(WorldToObject3x4(), float4(metaBalls[i].radius, 0.0f, 0.0f, 0.0f)));

@@ -13,7 +13,7 @@
 #include "MetaBallRaytracing.h"
 #include "CompiledShaders\Raytracing.hlsl.h"
 
-#define Scene2
+#define Scene1
 
 
 using namespace std;
