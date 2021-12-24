@@ -274,8 +274,7 @@ void MyClosestHitShader_AABB(inout RayPayload rayPayload, in ProceduralPrimitive
     float4 reflectedColor = float4(0, 0, 0, 0);
     // internal 
     if (inside)
-    {
-                        
+    {       
         float eta = 1.33;
         float biasStep = 0.00001;                       
         float3 normal = - attr.normal;
@@ -304,7 +303,7 @@ void MyClosestHitShader_AABB(inout RayPayload rayPayload, in ProceduralPrimitive
                 // Trace a reflection ray.
                 float3 reflectDirect = reflect(WorldRayDirection(), normal);
                 Ray reflectionRay = { HitWorldPosition() + biasStep * reflectDirect,  reflectDirect};
-                float4 reflectionColor = TraceRadianceRay(reflectionRay, rayPayload.recursionDepth, RAY_FLAG_CULL_BACK_FACING_TRIANGLES);
+                float4 reflectionColor = TraceRadianceRay(reflectionRay, rayPayload.recursionDepth, RAY_FLAG_CULL_FRONT_FACING_TRIANGLES);
 
                 reflectedColor = l_materialCB.reflectanceCoef * float4(fresnelR, 1) * reflectionColor;
             }
@@ -338,7 +337,7 @@ void MyClosestHitShader_AABB(inout RayPayload rayPayload, in ProceduralPrimitive
             // Trace a reflection ray.
             float3 reflectDirect = reflect(WorldRayDirection(), normal);
             Ray reflectionRay = { HitWorldPosition() + biasStep * reflectDirect,  reflectDirect};
-            float4 reflectionColor = TraceRadianceRay(reflectionRay, rayPayload.recursionDepth, RAY_FLAG_CULL_FRONT_FACING_TRIANGLES);
+            float4 reflectionColor = TraceRadianceRay(reflectionRay, rayPayload.recursionDepth, RAY_FLAG_CULL_BACK_FACING_TRIANGLES);
 
             reflectedColor = l_materialCB.reflectanceCoef * float4(fresnelR, 1) * reflectionColor;
         }
@@ -357,7 +356,7 @@ void MyClosestHitShader_AABB(inout RayPayload rayPayload, in ProceduralPrimitive
 
     // Calculate final color.
     float4 phongColor = CalculatePhongLighting(l_materialCB.albedo, attr.normal, shadowRayHit, l_materialCB.diffuseCoef, l_materialCB.specularCoef, l_materialCB.specularPower);
-    float4 color = phongColor + reflectedColor + refractionColor;
+    float4 color = 0 * phongColor + reflectedColor + refractionColor;
 
     // Apply visibility falloff.
     float t = RayTCurrent();
