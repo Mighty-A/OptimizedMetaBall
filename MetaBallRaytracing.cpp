@@ -13,6 +13,9 @@
 #include "MetaBallRaytracing.h"
 #include "CompiledShaders\Raytracing.hlsl.h"
 
+#define Scene2
+
+
 using namespace std;
 using namespace DX;
 
@@ -248,8 +251,14 @@ void MetaBallRaytracing::InitializeScene()
     // Setup camera.
     {
         // Initialize the view and projection inverse matrices.
+#ifdef Scene1
         m_eye = { 0.0f, 5.0f, -5.0f, 1.0f }; 
         m_at = { 0.0f, 1.0f, 0.0f, 1.0f };
+#endif
+#ifdef Scene2
+        m_eye = { 0.0f, 2.0f, -3.0f, 1.0f };
+        m_at = { 0.0f, 1.0f, 0.0f, 1.0f };
+#endif
         XMVECTOR right = { 1.0f, 0.0f, 0.0f, 0.0f };
 
         XMVECTOR direction = XMVector4Normalize(m_at - m_eye);
@@ -745,6 +754,7 @@ void MetaBallRaytracing::BuildMetaBalls()
         {XMFLOAT3(0.1f, 0.3f, 0.9f), 1.0f },
         {XMFLOAT3(1.4f, 1.3f, 1.9f), 0.7f },
         {XMFLOAT3(-0.5f, -0.5f, -0.5f), 0.3f },*/
+#ifdef Scene1
 {XMFLOAT3(-1.20f, -1.20f, -1.20f), 0.45f },
 {XMFLOAT3(-1.20f, -0.60f, -1.20f), 0.45f },
 {XMFLOAT3(-1.20f, 0.00f, -1.20f), 0.45f },
@@ -870,6 +880,18 @@ void MetaBallRaytracing::BuildMetaBalls()
 {XMFLOAT3(1.20f, 0.00f, 1.20f), 0.45f },
 {XMFLOAT3(1.20f, 0.60f, 1.20f), 0.45f },
 {XMFLOAT3(1.20f, 1.20f, 1.20f), 0.45f },
+#endif
+#ifdef Scene2
+{ XMFLOAT3(-0.60f, -0.60f, 0.00f), 0.45f },
+{ XMFLOAT3(-0.60f, 0.00f, 0.00f), 0.45f },
+{ XMFLOAT3(-0.60f, 0.60f, 0.00f), 0.45f },
+{ XMFLOAT3(0.00f, -0.60f, 0.00f), 0.45f },
+{ XMFLOAT3(0.00f, 0.00f, 0.00f), 0.45f },
+{ XMFLOAT3(0.00f, 0.60f, 0.00f), 0.45f },
+{ XMFLOAT3(0.60f, -0.60f, 0.00f), 0.45f },
+{ XMFLOAT3(0.60f, 0.00f, 0.00f), 0.45f },
+{ XMFLOAT3(0.60f, 0.60f, 0.00f), 0.45f },
+#endif
     };
 
 

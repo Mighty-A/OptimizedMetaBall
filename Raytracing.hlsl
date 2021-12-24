@@ -147,12 +147,16 @@ float4 TraceRadianceRay(in Ray ray, in UINT currentRayRecursionDepth)
     rayDesc.TMin = 0.000;
     rayDesc.TMax = 10000;
     RayPayload rayPayload = { float4(0, 0, 0, 0), currentRayRecursionDepth + 1, 0,
+#if MAX_INDEX_BUFFER_LENGTH >= 10
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+#endif
+#if MMAX_INDEX_BUFFER_LENGTH >=30
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,/*
+#endif/*
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
