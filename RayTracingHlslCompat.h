@@ -49,7 +49,7 @@ typedef UINT16 Index;
 
 // PERFORMANCE TIP: Set max recursion depth as low as needed
 // as drivers may apply optimization strategies for low recursion depths.
-#define MAX_RAY_RECURSION_DEPTH 3   // ~ primary rays + reflections + shadow rays from reflected geometry.
+#define MAX_RAY_RECURSION_DEPTH 3  // ~ primary rays + reflections + shadow rays from reflected geometry.
 
 
 struct ProceduralPrimitiveAttributes
@@ -57,10 +57,20 @@ struct ProceduralPrimitiveAttributes
     XMFLOAT3 normal;
 };
 
+struct MetaBallPrimitiveAttributes
+{
+    UINT index;
+    UINT hitType; // 0 inner; 1 outer
+};
+
+
+#define MAX_INDEX_BUFFER_LENGTH 10
 struct RayPayload
 {
     XMFLOAT4 color;
     UINT   recursionDepth;
+    UINT   indexCount;
+    UINT   indexBuffer[MAX_INDEX_BUFFER_LENGTH];
 };
 
 struct ShadowRayPayload
@@ -114,6 +124,11 @@ struct Vertex
     XMFLOAT3 normal;
 };
 
+struct MetaBall
+{
+    XMFLOAT3 center;
+    float radius;
+};
 
 // Ray types traced in this sample.
 namespace RayType {

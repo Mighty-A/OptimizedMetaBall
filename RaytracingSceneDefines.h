@@ -21,6 +21,7 @@ namespace GlobalRootSignature {
             SceneConstant,
             AABBattributeBuffer,
             VertexBuffers,
+            MetaBallBuffers,
             Count
         };
     }
@@ -31,6 +32,7 @@ namespace LocalRootSignature {
         enum Enum {
             Triangle = 0,
             AABB,
+            MetaBall,
             Count
         };
     }
@@ -67,6 +69,21 @@ namespace LocalRootSignature {
 }
 
 namespace LocalRootSignature {
+    namespace MetaBall {
+        namespace Slot {
+            enum Enum {
+                MaterialConstant = 0,
+                MetaBall,
+                Count
+            };
+        }
+        struct RootArguments {
+            PrimitiveConstantBuffer materialCb;
+        };
+    }
+}
+
+namespace LocalRootSignature {
     inline UINT MaxRootArgumentsSize()
     {
         return max(sizeof(Triangle::RootArguments), sizeof(AABB::RootArguments));
@@ -77,6 +94,7 @@ namespace GeometryType {
     enum Enum {
         Triangle = 0,
         AABB,       // Procedural geometry with an application provided AABB.
+        MetaBall,
         Count
     };
 }

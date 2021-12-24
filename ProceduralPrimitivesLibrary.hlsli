@@ -26,6 +26,7 @@
 #include "VolumetricPrimitives.hlsli"
 #include "SignedDistancePrimitives.hlsli"
 #include "SignedDistanceFractals.hlsli"
+#include "MetaballPrimitives.hlsli"
 
 // Analytic geometry intersection test.
 // AABB local space dimensions: <-1,1>.

@@ -22,12 +22,17 @@ const wchar_t* MetaBallRaytracing::c_intersectionShaderNames[] =
 {
     L"MyIntersectionShader_AnalyticPrimitive",
     L"MyIntersectionShader_VolumetricPrimitive",
-    L"MyIntersectionShader_SignedDistancePrimitive",
+    L"MyIntersectionShader_SignedDistancePrimitive"
 };
+const wchar_t* MetaBallRaytracing::c_intersectionShaderMetaballName = L"MyIntersectionShader_MetaBallPrimitive";
+
+const wchar_t* MetaBallRaytracing::c_anyhitShaderMetaBallName = L"MyAnyhitShader_MetaBallPrimitive";
+
 const wchar_t* MetaBallRaytracing::c_closestHitShaderNames[] =
 {
     L"MyClosestHitShader_Triangle",
     L"MyClosestHitShader_AABB",
+    L"MyClosestHitShader_MetaBallPrimitive"
 };
 const wchar_t* MetaBallRaytracing::c_missShaderNames[] =
 {
@@ -45,12 +50,16 @@ const wchar_t* MetaBallRaytracing::c_hitGroupNames_AABBGeometry[][RayType::Count
     { L"MyHitGroup_AABB_SignedDistancePrimitive", L"MyHitGroup_AABB_SignedDistancePrimitive_ShadowRay" },
 };
 
+const wchar_t* MetaBallRaytracing::c_hitGroupNames_MetaBallGeometry[] = {
+     L"MyHitGroup_MetaBallPrimitive", L"MyHitGroup_MetaBallPrimitive_ShadowRay",
+};
+
 MetaBallRaytracing::MetaBallRaytracing(UINT width, UINT height, std::wstring name) :
     DXSample(width, height, name),
     m_raytracingOutputResourceUAVDescriptorHeapIndex(UINT_MAX),
     m_animateGeometryTime(0.0f),
     m_animateCamera(false),
-    m_animateGeometry(true),
+    m_animateGeometry(false),
     m_animateLight(false),
     m_descriptorsAllocated(0),
     m_descriptorSize(0),
@@ -67,7 +76,7 @@ void MetaBallRaytracing::OnInit()
         DXGI_FORMAT_R8G8B8A8_UNORM,
         DXGI_FORMAT_UNKNOWN,
         FrameCount,
-        D3D_FEATURE_LEVEL_11_0,
+        D3D_FEATURE_LEVEL_12_1,
         // Sample shows handling of use cases with tearing support, which is OS dependent and has been supported since TH2.
         // Since the sample requires build 1809 (RS5) or higher, we don't need to handle non-tearing cases.
         DeviceResources::c_RequireTearingSupport,
@@ -159,6 +168,11 @@ void MetaBallRaytracing::UpdateAABBPrimitiveAttributes(float animationTime)
         SetTransformForAABB(offset + Cylinder, mScale15y, mIdentity);
         SetTransformForAABB(offset + FractalPyramid, mScale3, mIdentity);
     }
+
+    for (UINT i = 0; i < m_metaBalls.size(); i++)
+    {
+        m_metaBallBuffer[i] = m_metaBalls[i];
+    }
 }
 
 // Initialize scene rendering parameters.
@@ -216,7 +230,7 @@ void MetaBallRaytracing::InitializeScene()
             offset += VolumetricPrimitive::Count;
         }
 
-        /*
+        
         // Signed distance primitives.
         {
             using namespace SignedDistancePrimitive;
@@ -228,14 +242,14 @@ void MetaBallRaytracing::InitializeScene()
             SetAttributes(offset + Cylinder, red);
             SetAttributes(offset + FractalPyramid, green, 0, 1, 0.1f, 4, 0.8f);
         }
-        */
+        
     }
 
     // Setup camera.
     {
         // Initialize the view and projection inverse matrices.
-        m_eye = { 0.0f, 3.0f, -7.0f, 1.0f }; 
-        m_at = { 0.0f, 0.0f, 0.0f, 1.0f };
+        m_eye = { 0.0f, 2.0f, -3.0f, 1.0f }; 
+        m_at = { 0.0f, 1.0f, 0.0f, 1.0f };
         XMVECTOR right = { 1.0f, 0.0f, 0.0f, 0.0f };
 
         XMVECTOR direction = XMVector4Normalize(m_at - m_eye);
@@ -283,6 +297,8 @@ void MetaBallRaytracing::CreateAABBPrimitiveAttributesBuffers()
     auto device = m_deviceResources->GetD3DDevice();
     auto frameCount = m_deviceResources->GetBackBufferCount();
     m_aabbPrimitiveAttributeBuffer.Create(device, IntersectionShaderType::TotalPrimitiveCount, frameCount, L"AABB primitive attributes");
+
+    m_metaBallBuffer.Create(device, m_metaBall_aabbs.size(), frameCount, L"MetaBall");
 }
 
 // Create resources that depend on the device.
@@ -340,7 +356,7 @@ void MetaBallRaytracing::CreateRootSignatures()
     // Global Root Signature
     // This is a root signature that is shared across all raytracing shaders invoked during a DispatchRays() call.
     {
-        CD3DX12_DESCRIPTOR_RANGE ranges[2]; // Perfomance TIP: Order from most frequent to least frequent.
+        CD3DX12_DESCRIPTOR_RANGE ranges[3]; // Perfomance TIP: Order from most frequent to least frequent.
         ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);  // 1 output texture
         ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 1);  // 2 static index and vertex buffers.
 
@@ -350,6 +366,8 @@ void MetaBallRaytracing::CreateRootSignatures()
         rootParameters[GlobalRootSignature::Slot::SceneConstant].InitAsConstantBufferView(0);
         rootParameters[GlobalRootSignature::Slot::AABBattributeBuffer].InitAsShaderResourceView(3);
         rootParameters[GlobalRootSignature::Slot::VertexBuffers].InitAsDescriptorTable(1, &ranges[1]);
+        rootParameters[GlobalRootSignature::Slot::MetaBallBuffers].InitAsShaderResourceView(4);
+
         CD3DX12_ROOT_SIGNATURE_DESC globalRootSignatureDesc(ARRAYSIZE(rootParameters), rootParameters);
         SerializeAndCreateRaytracingRootSignature(globalRootSignatureDesc, &m_raytracingGlobalRootSignature);
     }
@@ -378,6 +396,19 @@ void MetaBallRaytracing::CreateRootSignatures()
             CD3DX12_ROOT_SIGNATURE_DESC localRootSignatureDesc(ARRAYSIZE(rootParameters), rootParameters);
             localRootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE;
             SerializeAndCreateRaytracingRootSignature(localRootSignatureDesc, &m_raytracingLocalRootSignature[LocalRootSignature::Type::AABB]);
+        }
+
+        // MetaBall geometry
+
+        {
+            namespace RootSignatureSlots = LocalRootSignature::MetaBall::Slot;
+            CD3DX12_ROOT_PARAMETER rootParameters[RootSignatureSlots::Count];
+            rootParameters[RootSignatureSlots::MaterialConstant].InitAsConstants(SizeOfInUint32(PrimitiveConstantBuffer), 1);
+            rootParameters[RootSignatureSlots::MetaBall].InitAsConstants(SizeOfInUint32(MetaBall), 2);
+
+            CD3DX12_ROOT_SIGNATURE_DESC localRootSignatureDesc(ARRAYSIZE(rootParameters), rootParameters);
+            localRootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE;
+            SerializeAndCreateRaytracingRootSignature(localRootSignatureDesc, &m_raytracingLocalRootSignature[LocalRootSignature::Type::MetaBall]);
         }
     }
 }
@@ -438,6 +469,24 @@ void MetaBallRaytracing::CreateHitGroupSubobjects(CD3DX12_STATE_OBJECT_DESC* ray
                 hitGroup->SetHitGroupType(D3D12_HIT_GROUP_TYPE_PROCEDURAL_PRIMITIVE);
             }
     }
+
+    // MetaBall geometry hit groups
+    {
+        // Create hit group for metaball intersection
+        for (UINT rayType = 0; rayType < RayType::Count; rayType++) 
+        {
+            auto hitGroup = raytracingPipeline->CreateSubobject<CD3DX12_HIT_GROUP_SUBOBJECT>();
+            hitGroup->SetIntersectionShaderImport(c_intersectionShaderMetaballName);
+            if (rayType == RayType::Radiance) 
+            {
+                hitGroup->SetClosestHitShaderImport(c_closestHitShaderNames[GeometryType::MetaBall]);
+                hitGroup->SetAnyHitShaderImport(c_anyhitShaderMetaBallName);
+            }
+            hitGroup->SetHitGroupExport(c_hitGroupNames_MetaBallGeometry[rayType]);
+            hitGroup->SetHitGroupType(D3D12_HIT_GROUP_TYPE_PROCEDURAL_PRIMITIVE);
+        }
+
+    }
 }
 
 // Local root signature and shader association
@@ -469,6 +518,16 @@ void MetaBallRaytracing::CreateLocalRootSignatureSubobjects(CD3DX12_STATE_OBJECT
             rootSignatureAssociation->AddExports(hitGroupsForIntersectionShaderType);
         }
     }
+
+    // MetaBall geometry
+    {
+        auto localRootSignature = raytracingPipeline->CreateSubobject<CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT>();
+        localRootSignature->SetRootSignature(m_raytracingLocalRootSignature[LocalRootSignature::Type::MetaBall].Get());
+        // Shader association
+        auto rootSignatureAssociation = raytracingPipeline->CreateSubobject<CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT>();
+        rootSignatureAssociation->SetSubobjectToAssociate(*localRootSignature);
+        rootSignatureAssociation->AddExports(c_hitGroupNames_MetaBallGeometry);
+    }
 }
 
 // Create a raytracing pipeline state object (RTPSO).
@@ -482,7 +541,7 @@ void MetaBallRaytracing::CreateRaytracingPipelineStateObject()
     // This simple sample utilizes default shader association except for local root signature subobject
     // which has an explicit association specified purely for demonstration purposes.
     // 1 - DXIL library
-    // 8 - Hit group types - 4 geometries (1 triangle, 3 aabb) x 2 ray types (ray, shadowRay)
+    // 10 - Hit group types - 4 geometries (1 triangle, 3 aabb, 1 MetaBall) x 2 ray types (ray, shadowRay)
     // 1 - Shader config
     // 6 - 3 x Local root signature and association
     // 1 - Global root signature
@@ -499,7 +558,7 @@ void MetaBallRaytracing::CreateRaytracingPipelineStateObject()
     // Defines the maximum sizes in bytes for the ray rayPayload and attribute structure.
     auto shaderConfig = raytracingPipeline.CreateSubobject<CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT>();
     UINT payloadSize = max(sizeof(RayPayload), sizeof(ShadowRayPayload));
-    UINT attributeSize = sizeof(struct ProceduralPrimitiveAttributes);
+    UINT attributeSize = max(sizeof(struct ProceduralPrimitiveAttributes), sizeof(struct MetaBallPrimitiveAttributes));
     shaderConfig->Config(payloadSize, attributeSize);
 
     // Local root signature and shader association
@@ -563,10 +622,11 @@ void MetaBallRaytracing::CreateDescriptorHeap()
     auto device = m_deviceResources->GetD3DDevice();
 
     D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc = {};
-    // Allocate a heap for 6 descriptors:
+    // Allocate a heap for 8(?) descriptors:
     // 2 - vertex and index  buffer SRVs
     // 1 - raytracing output texture SRV
-    descriptorHeapDesc.NumDescriptors = 3;
+    // 1 - metaball buffer SRV
+    descriptorHeapDesc.NumDescriptors = 4;
     descriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     descriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     descriptorHeapDesc.NodeMask = 0;
@@ -618,7 +678,7 @@ void MetaBallRaytracing::BuildProceduralGeometryAABBs()
         // Volumetric primitives.
         {
             using namespace VolumetricPrimitive;
-            m_aabbs[offset + Metaballs] = InitializeAABB(XMINT3(1, 0, 1), XMFLOAT3(3, 3, 3));
+            //m_aabbs[offset + Metaballs] = InitializeAABB(XMINT3(1, 0, 1), XMFLOAT3(3, 3, 3));
             offset += VolumetricPrimitive::Count;
         }
 
@@ -670,11 +730,56 @@ void MetaBallRaytracing::BuildPlaneGeometry()
     ThrowIfFalse(descriptorIndexVB == descriptorIndexIB + 1, L"Vertex Buffer descriptor index must follow that of Index Buffer descriptor index");
 }
 
+// Build MetaBalls within a bottom-level acceleration structure.
+void MetaBallRaytracing::BuildMetaBalls()
+{
+    auto device = m_deviceResources->GetD3DDevice();
+
+    // MetaBall center and radius;
+    MetaBall metaBalls[] =
+    {
+        /*
+        {XMFLOAT3(0.0f, 1.5f, 0.0f), 1.0f },
+        {XMFLOAT3(0.4f, 0.3f, 0.0f), 1.0f },
+        {XMFLOAT3(0.4f, 0.9f, 0.0f), 1.0f },
+        {XMFLOAT3(0.1f, 0.3f, 0.9f), 1.0f },
+        {XMFLOAT3(1.4f, 1.3f, 1.9f), 0.7f },
+        {XMFLOAT3(-0.5f, -0.5f, -0.5f), 0.3f },*/
+{XMFLOAT3(-0.60f, -0.60f, 0.00f), 0.45f },
+{XMFLOAT3(-0.60f, 0.00f, 0.00f), 0.45f },
+{XMFLOAT3(-0.60f, 0.60f, 0.00f), 0.45f },
+{XMFLOAT3(0.00f, -0.60f, 0.00f), 0.45f },
+{XMFLOAT3(0.00f, 0.00f, 0.00f), 0.45f },
+{XMFLOAT3(0.00f, 0.60f, 0.00f), 0.45f },
+{XMFLOAT3(0.60f, -0.60f, 0.00f), 0.45f },
+{XMFLOAT3(0.60f, 0.00f, 0.00f), 0.45f },
+{XMFLOAT3(0.60f, 0.60f, 0.00f), 0.45f },
+    };
+
+
+    for (auto metaBall : metaBalls) {
+        m_metaBalls.push_back(metaBall);
+        m_metaBall_aabbs.push_back(D3D12_RAYTRACING_AABB{
+            metaBall.center.x - metaBall.radius,
+            metaBall.center.y - metaBall.radius,
+            metaBall.center.z - metaBall.radius,
+            metaBall.center.x + metaBall.radius,
+            metaBall.center.y + metaBall.radius,
+            metaBall.center.z + metaBall.radius,
+            });
+    }
+
+    AllocateUploadBuffer(device, m_metaBall_aabbs.data(), m_metaBall_aabbs.size() * sizeof(m_metaBall_aabbs[0]), &m_metaBall_aabbBuffer.resource);
+
+    
+}
+
 // Build geometry used in the sample.
 void MetaBallRaytracing::BuildGeometry()
 {
     BuildProceduralGeometryAABBs();
     BuildPlaneGeometry();
+    BuildMetaBalls();
 }
 
 // Build geometry descs for bottom-level AS.
@@ -722,6 +827,22 @@ void MetaBallRaytracing::BuildGeometryDescsForBottomLevelAS(array<vector<D3D12_R
         {
             auto& geometryDesc = geometryDescs[BottomLevelASType::AABB][i];
             geometryDesc.AABBs.AABBs.StartAddress = m_aabbBuffer.resource->GetGPUVirtualAddress() + i * sizeof(D3D12_RAYTRACING_AABB);
+        }
+    }
+
+    // MetaBall geometry desc
+    {
+
+        D3D12_RAYTRACING_GEOMETRY_DESC metaballDescTemplate = {};
+        metaballDescTemplate.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS;
+        metaballDescTemplate.AABBs.AABBCount = 1;
+        metaballDescTemplate.AABBs.AABBs.StrideInBytes = sizeof(D3D12_RAYTRACING_AABB);
+        metaballDescTemplate.Flags = D3D12_RAYTRACING_GEOMETRY_FLAGS::D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION;
+
+        geometryDescs[BottomLevelASType::MetaBall].resize(m_metaBalls.size(), metaballDescTemplate);
+        for (UINT i = 0; i < m_metaBalls.size(); i++) {
+            auto& geometryDesc = geometryDescs[BottomLevelASType::MetaBall][i];
+            geometryDesc.AABBs.AABBs.StartAddress = m_metaBall_aabbBuffer.resource->GetGPUVirtualAddress() + i * sizeof(D3D12_RAYTRACING_AABB);
         }
     }
 }
@@ -824,10 +945,25 @@ void MetaBallRaytracing::BuildBotomLevelASInstanceDescs(BLASPtrType *bottomLevel
         instanceDesc.InstanceContributionToHitGroupIndex = BottomLevelASType::AABB * RayType::Count;
         instanceDesc.AccelerationStructure = bottomLevelASaddresses[BottomLevelASType::AABB];
 
+        
         // Move all AABBS above the ground plane.
         XMMATRIX mTranslation = XMMatrixTranslationFromVector(XMLoadFloat3(&XMFLOAT3(0, c_aabbWidth/2, 0)));
         XMStoreFloat3x4(reinterpret_cast<XMFLOAT3X4*>(instanceDesc.Transform), mTranslation);
     }
+
+    // Bottom-level AS with metaballs
+    {
+        auto& instanceDesc = instanceDescs[BottomLevelASType::MetaBall];
+        instanceDesc = {};
+        instanceDesc.InstanceMask = 1;
+        instanceDesc.InstanceContributionToHitGroupIndex = 22; // Warning: Hardcode here
+        instanceDesc.AccelerationStructure = bottomLevelASaddresses[BottomLevelASType::MetaBall];
+
+        // Move all Metaballs above the ground plane.
+        XMMATRIX mTranslation = XMMatrixTranslationFromVector(XMLoadFloat3(&XMFLOAT3(0, c_aabbWidth / 2, 0)));
+        XMStoreFloat3x4(reinterpret_cast<XMFLOAT3X4*>(instanceDesc.Transform), mTranslation);
+    }
+
     UINT64 bufferSize = static_cast<UINT64>(instanceDescs.size() * sizeof(instanceDescs[0]));
     AllocateUploadBuffer(device, instanceDescs.data(), bufferSize, &(*instanceDescsResource), L"InstanceDescs");
 };
@@ -872,7 +1008,8 @@ AccelerationStructureBuffers MetaBallRaytracing::BuildTopLevelAS(AccelerationStr
         D3D12_GPU_VIRTUAL_ADDRESS bottomLevelASaddresses[BottomLevelASType::Count] =
         {
             bottomLevelAS[0].accelerationStructure->GetGPUVirtualAddress(),
-            bottomLevelAS[1].accelerationStructure->GetGPUVirtualAddress()
+            bottomLevelAS[1].accelerationStructure->GetGPUVirtualAddress(),
+            bottomLevelAS[2].accelerationStructure->GetGPUVirtualAddress()
         };
         BuildBotomLevelASInstanceDescs<D3D12_RAYTRACING_INSTANCE_DESC>(bottomLevelASaddresses, &instanceDescsResource);
     }
@@ -954,6 +1091,7 @@ void MetaBallRaytracing::BuildShaderTables()
     void* missShaderIDs[RayType::Count];
     void* hitGroupShaderIDs_TriangleGeometry[RayType::Count];
     void* hitGroupShaderIDs_AABBGeometry[IntersectionShaderType::Count][RayType::Count];
+    void* hitGroupShaderIDs_MetaBallGeometry[RayType::Count];
 
     // A shader name look-up table for shader table debug print out.
     unordered_map<void*, wstring> shaderIdToStringMap;
@@ -979,6 +1117,11 @@ void MetaBallRaytracing::BuildShaderTables()
                 hitGroupShaderIDs_AABBGeometry[r][c] = stateObjectProperties->GetShaderIdentifier(c_hitGroupNames_AABBGeometry[r][c]); 
                 shaderIdToStringMap[hitGroupShaderIDs_AABBGeometry[r][c]] = c_hitGroupNames_AABBGeometry[r][c];
             }
+        for (UINT i = 0; i < RayType::Count; i++)
+        {
+            hitGroupShaderIDs_MetaBallGeometry[i] = stateObjectProperties->GetShaderIdentifier(c_hitGroupNames_MetaBallGeometry[i]);
+            shaderIdToStringMap[hitGroupShaderIDs_MetaBallGeometry[i]] = c_hitGroupNames_MetaBallGeometry[i];
+        }
     };
 
     // Get shader identifiers.
@@ -1036,7 +1179,7 @@ void MetaBallRaytracing::BuildShaderTables()
 
     // Hit group shader table.
     {
-        UINT numShaderRecords = RayType::Count + IntersectionShaderType::TotalPrimitiveCount * RayType::Count;
+        UINT numShaderRecords = RayType::Count + IntersectionShaderType::TotalPrimitiveCount * RayType::Count + RayType::Count;
         UINT shaderRecordSize = shaderIDSize + LocalRootSignature::MaxRootArgumentsSize();
         ShaderTable hitGroupShaderTable(device, numShaderRecords, shaderRecordSize, L"HitGroupShaderTable");
 
@@ -1076,6 +1219,17 @@ void MetaBallRaytracing::BuildShaderTables()
                     }
                 }
             }
+        }
+
+        // MetaBall geometry hit groups
+        {
+            LocalRootSignature::MetaBall::RootArguments rootArgs;
+            rootArgs.materialCb = m_metaBallMeterialCB;
+            for (auto& hitGroupShaderID : hitGroupShaderIDs_MetaBallGeometry)
+            {
+                hitGroupShaderTable.push_back(ShaderRecord(hitGroupShaderID, shaderIDSize, &rootArgs, sizeof(rootArgs)));
+            }
+
         }
         hitGroupShaderTable.DebugPrint(shaderIdToStringMap);
         m_hitGroupShaderTableStrideInBytes = hitGroupShaderTable.GetShaderRecordSize();
@@ -1181,6 +1335,9 @@ void MetaBallRaytracing::DoRaytracing()
 
         m_aabbPrimitiveAttributeBuffer.CopyStagingToGpu(frameIndex);
         commandList->SetComputeRootShaderResourceView(GlobalRootSignature::Slot::AABBattributeBuffer, m_aabbPrimitiveAttributeBuffer.GpuVirtualAddress(frameIndex));
+
+        m_metaBallBuffer.CopyStagingToGpu(frameIndex);
+        commandList->SetComputeRootShaderResourceView(GlobalRootSignature::Slot::MetaBallBuffers, m_metaBallBuffer.GpuVirtualAddress(frameIndex));
     }
 
     // Bind the heaps, acceleration structure and dispatch rays.  
@@ -1251,9 +1408,11 @@ void MetaBallRaytracing::ReleaseDeviceDependentResources()
     m_descriptorsAllocated = 0;
     m_sceneCB.Release();
     m_aabbPrimitiveAttributeBuffer.Release();
+    m_metaBallBuffer.Release();
     m_indexBuffer.resource.Reset();
     m_vertexBuffer.resource.Reset();
     m_aabbBuffer.resource.Reset();
+    m_metaBall_aabbBuffer.resource.Reset();
 
     ResetComPtrArray(&m_bottomLevelAS);
     m_topLevelAS.Reset();

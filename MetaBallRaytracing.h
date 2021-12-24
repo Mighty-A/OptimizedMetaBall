@@ -39,7 +39,7 @@ private:
     static const UINT FrameCount = 3;
 
     // Constants.
-    const UINT NUM_BLAS = 2;          // Triangle + AABB bottom-level AS.
+    const UINT NUM_BLAS = 3;          // Triangle + AABB bottom-level AS + MetaBall BLAS.
     const float c_aabbWidth = 2;      // AABB width.
     const float c_aabbDistance = 2;   // Distance between AABBs.
     
@@ -60,7 +60,9 @@ private:
     // Raytracing scene
     ConstantBuffer<SceneConstantBuffer> m_sceneCB;
     StructuredBuffer<PrimitiveInstancePerFrameBuffer> m_aabbPrimitiveAttributeBuffer;
+    StructuredBuffer<MetaBall> m_metaBallBuffer;
     std::vector<D3D12_RAYTRACING_AABB> m_aabbs;
+    std::vector<D3D12_RAYTRACING_AABB> m_metaBall_aabbs;
 
     // Root constants
     PrimitiveConstantBuffer m_planeMaterialCB;
@@ -71,6 +73,9 @@ private:
     D3DBuffer m_indexBuffer;
     D3DBuffer m_vertexBuffer;
     D3DBuffer m_aabbBuffer;
+    D3DBuffer m_metaBall_aabbBuffer;
+
+    std::vector<MetaBall> m_metaBalls;
 
     // Acceleration structure
     ComPtr<ID3D12Resource> m_bottomLevelAS[BottomLevelASType::Count];
@@ -84,8 +89,11 @@ private:
     // Shader tables
     static const wchar_t* c_hitGroupNames_TriangleGeometry[RayType::Count];
     static const wchar_t* c_hitGroupNames_AABBGeometry[IntersectionShaderType::Count][RayType::Count];
+    static const wchar_t* c_hitGroupNames_MetaBallGeometry[RayType::Count];
     static const wchar_t* c_raygenShaderName;
     static const wchar_t* c_intersectionShaderNames[IntersectionShaderType::Count];
+    static const wchar_t* c_intersectionShaderMetaballName;
+    static const wchar_t* c_anyhitShaderMetaBallName;
     static const wchar_t* c_closestHitShaderNames[GeometryType::Count];
     static const wchar_t* c_missShaderNames[RayType::Count];
 
@@ -128,6 +136,7 @@ private:
     void CreateDescriptorHeap();
     void CreateRaytracingOutputResource();
     void BuildProceduralGeometryAABBs();
+    void BuildMetaBalls();
     void BuildGeometry();
     void BuildPlaneGeometry();
     void BuildGeometryDescsForBottomLevelAS(std::array<std::vector<D3D12_RAYTRACING_GEOMETRY_DESC>, BottomLevelASType::Count>& geometryDescs);

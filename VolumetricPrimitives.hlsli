@@ -39,6 +39,7 @@ float CalculateMetaballPotential(in float3 position, in Metaball blob, out float
     
     if (distance <= blob.radius)
     {
+    
         float d = distance;
 
         // Quintic polynomial field function.
