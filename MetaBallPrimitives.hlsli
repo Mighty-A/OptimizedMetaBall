@@ -3,7 +3,7 @@
 
 #include "RaytracingShaderHelper.hlsli"
 
-
+#define INTERVAL_REFINEMENT
 // MetaBall resources
 					StructuredBuffer<Metaball> g_metaballs : register(t4, space0);
 					
@@ -54,20 +54,36 @@ bool RayMetaBallPostIntersectionTest(in Ray localRay, in RayPayload payload, out
 	UINT numOfMetaBalls = payload.indexCount;
 	float tmin = INFINITY;
 	float tmax = -INFINITY;
+	uint j = 0;
+	float smin = INFINITY;
+	float start = RayTMin();
 	MetaBall metaBalls[MAX_INDEX_BUFFER_LENGTH];
+	const float innerRatio = 0.74f;
 	for (UINT i = 0; i < numOfMetaBalls; i++) {
-		metaBalls[i] = g_metaballs[payload.indexBuffer[i]];
-		metaBalls[i].center += Translation;
+		MetaBall m = g_metaballs[payload.indexBuffer[i]];
+		m.center += Translation;
 		//metaBalls[i].center = mul(WorldToObject3x4(), float4(metaBalls[i].center, 1.0f));
 		//metaBalls[i].radius = length(mul(WorldToObject3x4(), float4(metaBalls[i].radius, 0.0f, 0.0f, 0.0f)));
 		float _thit, _tmax;
-		if (RaySolidSphereIntersectionTest(localRay, _thit, _tmax, metaBalls[i].center, metaBalls[i].radius))
+		if (RaySolidSphereIntersectionTest(localRay, _thit, _tmax, m.center, m.radius))
         {
+#ifdef INTERVAL_REFINEMENT
+			if (_thit > smin || _thit < start) {
+				continue;
+			}
+			float _shit, _smax;
+            // test inner
+            if (RaySolidSphereIntersectionTest(localRay, _shit, _smax, m.center, m.radius * innerRatio)) {
+                smin = min(_shit, smin);
+            }
+#endif
             tmin = min(_thit, tmin);
             tmax = max(_tmax, tmax);
-			
+			metaBalls[j++] = m;
 		}
 	}
+	
+	numOfMetaBalls = j;
 	
 	tmin = max(tmin, RayTMin());
 	tmax = min(tmax, RayTCurrent());
@@ -101,9 +117,6 @@ bool RayMetaBallPostIntersectionTest(in Ray localRay, in RayPayload payload, out
 		t += minTStep;
 		
 	}
-	
-	
-	
 	return false;
 }
 

@@ -149,10 +149,10 @@ float4 TraceRadianceRay(in Ray ray, in UINT currentRayRecursionDepth)
     RayPayload rayPayload = { float4(0, 0, 0, 0), currentRayRecursionDepth + 1, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
-    /*0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,/*
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
@@ -380,11 +380,39 @@ void MyClosestHitShader_AABB(inout RayPayload rayPayload, in ProceduralPrimitive
 [shader("closesthit")]
 void MyClosestHitShader_MetaBallPrimitive(inout RayPayload rayPayload, in ProceduralPrimitiveAttributes attr)
 {
-    // Since we ignore every reported hit, there is nothing to do for this closest shader
-        if (rayPayload.indexCount == 1) 
-        rayPayload.color = float4(1.0, 1.0, 0.0, 1.0);
-    else if (rayPayload.indexCount == 2)
-		rayPayload.color = float4(1.0, 0.0, 0.0, 1.0);
+  if (rayPayload.indexCount != 0) {
+        Ray localray;
+        localray.direction = WorldRayDirection();
+        localray.origin = WorldRayOrigin();
+        float thit = 0, _thit, _tmax;
+        float3 normal = 0;
+        if (RayMetaBallPostIntersectionTest(localray, rayPayload, thit, normal)) {
+            
+            
+            float3 hitPosition = localray.origin + localray.direction * thit;
+            Ray shadowRay = { hitPosition, normalize(g_sceneCB.lightPosition.xyz - hitPosition) };
+            bool shadowRayHit = TraceShadowRayAndReportIfHit(shadowRay, rayPayload.recursionDepth);
+
+	        float3 fresnelR = FresnelReflectanceSchlick(localray.direction, normal, float4(0.549f, 0.555f, 0.554f, 1.0f).xyz);
+            // Reflected component.
+            float4 reflectedColor = float4(0, 0, 0, 0);
+            if (1.0f > 0.001)
+            {
+                // Trace a reflection ray.
+                Ray reflectionRay = { hitPosition, reflect(localray.direction, normal) };
+                float4 reflectionColor = TraceRadianceRay(reflectionRay, rayPayload.recursionDepth);
+
+
+                reflectedColor = 1.0f * float4(fresnelR, 1) * reflectionColor;
+            }
+            // Calculate final color.
+            float4 phongColor = CalculatePhongLightingSpecial(hitPosition, float4(0.549f, 0.555f, 0.554f, 1.0f), normal, shadowRayHit, 0.9, 0.7, 50);
+            float4 color = phongColor + reflectedColor;
+            
+            rayPayload.color = color;
+            return;
+        }
+    }
 }
 
 //***************************************************************************
@@ -539,6 +567,9 @@ void MyIntersectionShader_MetaBallPrimitive()
     {
         hitOuter = true;
         float s_hit;
+        if (S_hit > RayTMin() && S_hit < RayTCurrent())
+            ReportHit(S_hit, 0, attr);
+        /*
         if (RayMetaballIntersectionTest(localRay, innerBall, s_hit))
         {
             attr.hitType = 0;
@@ -549,7 +580,7 @@ void MyIntersectionShader_MetaBallPrimitive()
             attr.hitType = 1;
             if (S_hit < RayTCurrent())
                 ReportHit(S_hit, 0, attr);
-        }
+        }*/
     }
     
 
@@ -568,7 +599,7 @@ void MyAnyhitShader_MetaBallPrimitive(inout RayPayload payload, in MetaBallPrimi
     if (payload.indexCount < MAX_INDEX_BUFFER_LENGTH) {
         payload.indexBuffer[payload.indexCount++] = attr.index;
     }
-    IgnoreHit();
+        IgnoreHit();
     // give control back to the Intersection Shader
 }
 

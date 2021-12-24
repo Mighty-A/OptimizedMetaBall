@@ -64,7 +64,7 @@ struct MetaBallPrimitiveAttributes
 };
 
 
-#define MAX_INDEX_BUFFER_LENGTH 10
+#define MAX_INDEX_BUFFER_LENGTH 30
 struct RayPayload
 {
     XMFLOAT4 color;
