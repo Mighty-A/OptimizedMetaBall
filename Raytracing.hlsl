@@ -131,7 +131,7 @@ float4 CalculatePhongLightingSpecial(in float3 hitPosition, in float4 albedo, in
 //***************************************************************************
 
 // Trace a radiance ray into the scene and returns a shaded color.
-float4 TraceRadianceRay(in Ray ray, in UINT currentRayRecursionDepth)
+float4 TraceRadianceRay(in Ray ray, in UINT currentRayRecursionDepth, in RAY_FLAG flag = RAY_FLAG_CULL_BACK_FACING_TRIANGLES)
 {
     if (currentRayRecursionDepth >= MAX_RAY_RECURSION_DEPTH)
     {
@@ -163,20 +163,23 @@ float4 TraceRadianceRay(in Ray ray, in UINT currentRayRecursionDepth)
 #if MAX_INDEX_BUFFER_LENGTH > 128
     0,
 #endif
-   /*
+#if MAX_INDEX_BUFFER_LENGTH >= 1000
+   
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
+    0, 0, 
+#endif
+    /* 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0*/
 					};
     TraceRay(g_scene,
-        RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
+        flag,
         TraceRayParameters::InstanceMask,
         TraceRayParameters::HitGroup::Offset[RayType::Radiance],
         0, //TraceRayParameters::HitGroup::GeometryStride,
@@ -205,7 +208,7 @@ bool TraceShadowRayAndReportIfHit(in Ray ray, in UINT currentRayRecursionDepth)
     rayDesc.Direction = ray.direction;
     // Set TMin to a zero value to avoid aliasing artifcats along contact areas.
     // Note: make sure to enable back-face culling so as to avoid surface face fighting.
-    rayDesc.TMin = 0;
+    rayDesc.TMin = 0.001;
     rayDesc.TMax = 10000;
 
     // Initialize shadow ray payload.
@@ -250,8 +253,7 @@ void MyRaygenShader()
 //***************************************************************************
 
 
-[shader("closesthit")]
-void MyClosestHitShader_Triangle(inout RayPayload rayPayload, in BuiltInTriangleIntersectionAttributes attr)
+inline bool AnyMetaBallsIntersection(inout RayPayload rayPayload) 
 {
     UINT sum = 0;
     for (UINT i = 0; i < MAX_INDEX_BUFFER_LENGTH / 32 + 1; i += 1U) {
@@ -265,15 +267,105 @@ void MyClosestHitShader_Triangle(inout RayPayload rayPayload, in BuiltInTriangle
         float3 normal = 0;
         if (RayMetaBallPostIntersectionTest(localray, rayPayload, thit, normal)) {
             
+            // Constant
+            float4 albedo = float4(0.549f, 0.555f, 0.554f, 1.0f);
+            float reflectedCoef = 1.0f;
+            float refractionCoef = 1.0f;
+            float diffuseCoef = 0.9f;
+            float specularCoef = 0.7f;
+            float specularPower = 50.0f;
             
+            // shadow (unabled)
             float3 hitPosition = localray.origin + localray.direction * thit;
             Ray shadowRay = { hitPosition, normalize(g_sceneCB.lightPosition.xyz - hitPosition) };
             bool shadowRayHit = TraceShadowRayAndReportIfHit(shadowRay, rayPayload.recursionDepth);
+#ifdef PREFER_PERFORMANCE
+            // From inside test
+            albedo = float4(0.020f, 0.020f, 0.020f, 1.0f);
+            bool fromInside = dot(localray.direction, normal) > 0;
+            float4 refractionColor = float4(0, 0, 0, 0); 
+            float4 reflectedColor = float4(0, 0, 0, 0);
+            if (fromInside) 
+            {
+                float eta = 1.33;
+                float biasStep = 0.00001;       
+                normal = -normal;
+                float3 refractDirect = refract(localray.direction, normal, eta);
+                
+                if (length(refractDirect) == 0)
+                {              
+                    if (reflectedCoef > 0.001)
+                    {
+                        // Trace a reflection ray.
+                        float3 reflectDirect = reflect(localray.direction, normal);
+                        Ray reflectionRay = { hitPosition + biasStep * reflectDirect,  reflectDirect};
+                        float4 reflectionColor = TraceRadianceRay(reflectionRay, rayPayload.recursionDepth, RAY_FLAG_CULL_BACK_FACING_TRIANGLES);
 
-	        float3 fresnelR = FresnelReflectanceSchlick(localray.direction, normal, float4(0.549f, 0.555f, 0.554f, 1.0f).xyz);
+                        reflectedColor = float4(1.0f, 0.0f, 0.0f, 1.0f);//reflectedCoef  * reflectionColor;
+                    }
+                } else
+                {
+                    // Trace a reflection ray.
+                    float3 fresnelR = TotalFresnelReflectanceSchlick(localray.direction, normal, albedo.xyz);
+ 
+                    if (reflectedCoef > 0.001)
+                    {
+                        // Trace a reflection ray.
+                        float3 reflectDirect = reflect(localray.direction, normal);
+                        Ray reflectionRay = { hitPosition + biasStep * reflectDirect,  reflectDirect};
+                        float4 reflectionColor = TraceRadianceRay(reflectionRay, rayPayload.recursionDepth, RAY_FLAG_CULL_FRONT_FACING_TRIANGLES);
+
+                        reflectedColor = reflectedCoef * float4(fresnelR, 1) * reflectionColor;
+                    }
+                            
+                    // refraction
+       
+                    if (refractionCoef > 0.001) 
+                    {
+                        Ray refractionRay = { hitPosition + biasStep * refractDirect, refractDirect};
+
+                        refractionColor = TraceRadianceRay(refractionRay, rayPayload.recursionDepth, RAY_FLAG_CULL_BACK_FACING_TRIANGLES); // add extra trace for entering medium
+        
+                        refractionColor = float4(0.0f, 1.0f, 0.0f, 1.0f);//refractionCoef * float4(1 - fresnelR, 1) * refractionColor;
+                    }  
+                }
+            } else {
+                float eta = 1.0 / 1.33;
+                float biasStep = 0.0001; 
+                float3 refractDirect = refract(localray.direction, normal, eta);
+                        
+                // Trace a reflection ray.
+                float3 fresnelR = FresnelReflectanceSchlick(localray.direction, normal, albedo.xyz);
+ 
+                if (reflectedCoef > 0.001)
+                {
+                    // Trace a reflection ray.
+                    float3 reflectDirect = reflect(localray.direction, normal);
+                    Ray reflectionRay = { hitPosition + biasStep * reflectDirect,  reflectDirect};
+                    float4 reflectionColor = TraceRadianceRay(reflectionRay, rayPayload.recursionDepth, RAY_FLAG_CULL_BACK_FACING_TRIANGLES);
+
+                    reflectedColor = reflectedCoef * float4(fresnelR, 1) * reflectionColor;
+                }
+                            
+                // refraction
+       
+                if (refractionCoef > 0.001) 
+                {
+                    Ray refractionRay = { hitPosition + biasStep * refractDirect, refractDirect};
+
+                    refractionColor = TraceRadianceRay(refractionRay, rayPayload.recursionDepth, RAY_FLAG_CULL_BACK_FACING_TRIANGLES); // add extra trace for entering medium
+        
+                    refractionColor = refractionCoef * float4(1 - fresnelR, 1) * refractionColor;
+                }       
+            }
+            float4 phongColor = CalculatePhongLightingSpecial(hitPosition, albedo, normal, shadowRayHit, diffuseCoef, specularCoef, specularPower);
+            float4 color = 0 * phongColor + reflectedColor + refractionColor;
+            rayPayload.color = color;
+#else
+	        float3 fresnelR = FresnelReflectanceSchlick(localray.direction, normal, albedo.xyz);
             // Reflected component.
             float4 reflectedColor = float4(0, 0, 0, 0);
-            if (1.0f > 0.001)
+            if (reflectedCoef > 0.001)
             {
                 // Trace a reflection ray.
                 Ray reflectionRay = { hitPosition, reflect(localray.direction, normal) };
@@ -283,12 +375,22 @@ void MyClosestHitShader_Triangle(inout RayPayload rayPayload, in BuiltInTriangle
                 reflectedColor = 1.0f * float4(fresnelR, 1) * reflectionColor;
             }
             // Calculate final color.
-            float4 phongColor = CalculatePhongLightingSpecial(hitPosition, float4(0.549f, 0.555f, 0.554f, 1.0f), normal, shadowRayHit, 0.9, 0.7, 50);
+            float4 phongColor = CalculatePhongLightingSpecial(hitPosition, albedo, normal, shadowRayHit, diffuseCoef, specularCoef, specularPower);
             float4 color = phongColor + reflectedColor;
             
             rayPayload.color = color;
-            return;
+#endif
+            return true;
         }
+    }
+    return false;
+}
+
+[shader("closesthit")]
+void MyClosestHitShader_Triangle(inout RayPayload rayPayload, in BuiltInTriangleIntersectionAttributes attr)
+{
+    if (AnyMetaBallsIntersection(rayPayload)) {
+        return;
     }
     
     // Get the base index of the triangle's first 16 bit index.
@@ -393,43 +495,10 @@ void MyClosestHitShader_AABB(inout RayPayload rayPayload, in ProceduralPrimitive
 
 [shader("closesthit")]
 void MyClosestHitShader_MetaBallPrimitive(inout RayPayload rayPayload, in ProceduralPrimitiveAttributes attr)
-{
-    UINT sum = 0;
-    for (UINT i = 0; i < MAX_INDEX_BUFFER_LENGTH / 32 + 1; i += 1U) {
-        sum += rayPayload.bit[i];
-    }
-    if (sum != 0) {
-        Ray localray;
-        localray.direction = WorldRayDirection();
-        localray.origin = WorldRayOrigin();
-        float thit = 0, _thit, _tmax;
-        float3 normal = 0;
-        if (RayMetaBallPostIntersectionTest(localray, rayPayload, thit, normal)) {
-            
-            
-            float3 hitPosition = localray.origin + localray.direction * thit;
-            Ray shadowRay = { hitPosition, normalize(g_sceneCB.lightPosition.xyz - hitPosition) };
-            bool shadowRayHit = TraceShadowRayAndReportIfHit(shadowRay, rayPayload.recursionDepth);
-
-	        float3 fresnelR = FresnelReflectanceSchlick(localray.direction, normal, float4(0.549f, 0.555f, 0.554f, 1.0f).xyz);
-            // Reflected component.
-            float4 reflectedColor = float4(0, 0, 0, 0);
-            if (1.0f > 0.001)
-            {
-                // Trace a reflection ray.
-                Ray reflectionRay = { hitPosition, reflect(localray.direction, normal) };
-                float4 reflectionColor = TraceRadianceRay(reflectionRay, rayPayload.recursionDepth);
-
-
-                reflectedColor = 1.0f * float4(fresnelR, 1) * reflectionColor;
-            }
-            // Calculate final color.
-            float4 phongColor = CalculatePhongLightingSpecial(hitPosition, float4(0.549f, 0.555f, 0.554f, 1.0f), normal, shadowRayHit, 0.9, 0.7, 50);
-            float4 color = phongColor + reflectedColor;
-            
-            rayPayload.color = color;
-            return;
-        }
+{    
+    if (AnyMetaBallsIntersection(rayPayload)) 
+    {
+        return;
     }
 }
 
@@ -441,43 +510,8 @@ void MyClosestHitShader_MetaBallPrimitive(inout RayPayload rayPayload, in Proced
 void MyMissShader(inout RayPayload rayPayload)
 {
     float4 backgroundColor = float4(BackgroundColor);
-    
-    UINT sum = 0;
-    for (UINT i = 0; i < MAX_INDEX_BUFFER_LENGTH / 32 + 1; i += 1U) {
-        sum += rayPayload.bit[i];
-    }
-    if (sum != 0) {
-        Ray localray;
-        localray.direction = WorldRayDirection();
-        localray.origin = WorldRayOrigin();
-        float thit = 0, _thit, _tmax;
-        float3 normal = 0;
-        if (RayMetaBallPostIntersectionTest(localray, rayPayload, thit, normal)) {
-            
-            
-            float3 hitPosition = localray.origin + localray.direction * thit;
-            Ray shadowRay = { hitPosition, normalize(g_sceneCB.lightPosition.xyz - hitPosition) };
-            bool shadowRayHit = TraceShadowRayAndReportIfHit(shadowRay, rayPayload.recursionDepth);
-
-	        float3 fresnelR = FresnelReflectanceSchlick(localray.direction, normal, float4(0.549f, 0.555f, 0.554f, 1.0f).xyz);
-            // Reflected component.
-            float4 reflectedColor = float4(0, 0, 0, 0);
-            if (1.0f > 0.001)
-            {
-                // Trace a reflection ray.
-                Ray reflectionRay = { hitPosition, reflect(localray.direction, normal) };
-                float4 reflectionColor = TraceRadianceRay(reflectionRay, rayPayload.recursionDepth);
-
-
-                reflectedColor = 1.0f * float4(fresnelR, 1) * reflectionColor;
-            }
-            // Calculate final color.
-            float4 phongColor = CalculatePhongLightingSpecial(hitPosition, float4(0.549f, 0.555f, 0.554f, 1.0f), normal, shadowRayHit, 0.9, 0.7, 50);
-            float4 color = phongColor + reflectedColor;
-            
-            rayPayload.color = color;
-            return;
-        }
+    if (AnyMetaBallsIntersection(rayPayload)) {
+        return;
     }
     
         rayPayload.color = backgroundColor;

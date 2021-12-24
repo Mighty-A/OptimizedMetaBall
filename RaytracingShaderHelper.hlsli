@@ -181,5 +181,10 @@ float3 FresnelReflectanceSchlick(in float3 I, in float3 N, in float3 f0)
     return f0 + (1 - f0)*pow(1 - cosi, 5);
 }
 
+float3 TotalFresnelReflectanceSchlick(in float3 I, in float3 N, in float3 f0)
+{
+    float cosi = saturate(dot(-I, N));
+    return (cosi < 0.6614) ? float3(0.0f, 1.0f, 0.0f) : f0 + (1 - f0) * pow((1 - cosi) / 0.3389, 5);
+}
 
 #endif // RAYTRACINGSHADERHELPER_H

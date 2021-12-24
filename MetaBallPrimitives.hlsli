@@ -3,7 +3,7 @@
 
 #include "RaytracingShaderHelper.hlsli"
 
-#define INTERVAL_REFINEMENT
+//#define INTERVAL_REFINEMENT
 #define MAX_METABALLS_PER_CAL 10
 // MetaBall resources
 					StructuredBuffer<Metaball> g_metaballs : register(t4, space0);
@@ -36,9 +36,25 @@ bool RayMetaballIntersectionTest(in Ray localRay, in MetaBall metaBall, inout fl
 	}
 	return false;
 }
+
+float3 CalculateMetaballNormal(in float3 position, in Metaball blob)
+{
+    float3 direction = position - blob.center;
+    float distance = length(direction);
+
+    if (distance < blob.radius)
+    {
+        float d = blob.radius - distance;
+        float r = d / blob.radius;
+        float len = 30 / (d * distance) * r * r * r * (r - 1) * (r - 1);
+        return direction * len;
+    }
+    return float3(0, 0, 0);
+}
 // Calculate a normal via central differences.
 float3 CalculateMetaballNormal(in float3 position, in Metaball blobs[MAX_METABALLS_PER_CAL], in UINT nActiveMetaballs)
 {
+	/*
     float e = 0.5773 * 0.00001;
     return normalize(float3(
         CalculateMetaballsPotential(position + float3(-e, 0, 0), blobs, nActiveMetaballs) -
@@ -47,6 +63,13 @@ float3 CalculateMetaballNormal(in float3 position, in Metaball blobs[MAX_METABAL
         CalculateMetaballsPotential(position + float3(0, e, 0), blobs, nActiveMetaballs),
         CalculateMetaballsPotential(position + float3(0, 0, -e), blobs, nActiveMetaballs) -
         CalculateMetaballsPotential(position + float3(0, 0, e), blobs, nActiveMetaballs)));
+	*/
+	float3 norm = { 0, 0, 0 };
+    for (UINT j = 0; j < nActiveMetaballs; ++j)
+    {
+        norm += CalculateMetaballNormal(position, blobs[j]);
+    }
+    return normalize(norm);
 }
 bool RayMetaBallPostIntersectionTest(in Ray localRay, in RayPayload payload, out float thit, out float3 normal)
 {
@@ -92,12 +115,23 @@ bool RayMetaBallPostIntersectionTest(in Ray localRay, in RayPayload payload, out
 	
 	tmin = max(tmin, RayTMin());
 	tmax = min(tmax, RayTCurrent());
-	UINT MAX_STEPS = 128;
+	UINT MAX_STEPS = 256;
 	
     float t = tmin;
     float minTStep = (tmax - tmin) / (MAX_STEPS);
     UINT iStep = 0;
 	const float Threshold = 0.1f;
+	
+	
+	float3 position = localRay.origin + t * localRay.direction;
+	float sumFieldpotential = 0;
+	for (i = 0; i < numOfMetaBalls; i++)
+	{
+	   	float distance;
+		float tempPotential = CalculateMetaballPotential(position, metaBalls[i], distance);
+		sumFieldpotential += tempPotential;
+	}
+	bool fromInside = sumFieldpotential > Threshold;
 	
 	while (iStep++ < MAX_STEPS) 
 	{
@@ -110,7 +144,16 @@ bool RayMetaBallPostIntersectionTest(in Ray localRay, in RayPayload payload, out
 			sumFieldpotential += tempPotential;
 		}
 		
-		if (sumFieldpotential >= Threshold)
+		if (!fromInside && sumFieldpotential >= Threshold)
+		{
+			normal = CalculateMetaballNormal(position, metaBalls, numOfMetaBalls);
+			if (IsAValidHit(localRay, t, normal))
+			{
+				thit = t;
+				return true;
+			}
+		}
+		if (fromInside && sumFieldpotential <= Threshold)
 		{
 			normal = CalculateMetaballNormal(position, metaBalls, numOfMetaBalls);
 			if (IsAValidHit(localRay, t, normal))

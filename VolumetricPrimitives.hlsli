@@ -49,10 +49,8 @@ float CalculateMetaballPotential(in float3 position, in Metaball blob, out float
         // but this one gives f(0) = 0, f(radius) = 1, so we use the distance to radius instead.
         d = blob.radius - d;
 
-        float r = blob.radius;
-        return 6 * (d*d*d*d*d) / (r*r*r*r*r)
-            - 15 * (d*d*d*d) / (r*r*r*r)
-            + 10 * (d*d*d) / (r*r*r);
+        float r = d / blob.radius;
+        return r * r * r * (r * (r * 6 - 15) + 10);
     }
     return 0;
 }

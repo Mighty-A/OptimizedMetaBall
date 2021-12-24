@@ -60,6 +60,27 @@ bool SolveRaySphereIntersectionEquation(in Ray ray, out float tmin, out float tm
     return SolveQuadraticEqn(a, b, c, tmin, tmax);
 }
 
+bool NewSolveRaySphereIntersection(in Ray ray, out float tmin, out float tmax, in float3 c, in float r)
+{
+    float3 l = c - ray.origin;
+    float s = dot(l, ray.direction);
+    float l_square = dot(l, l);
+    float r_square = r * r;
+    if (s < 0 && l_square > r_square)
+    {
+        return false;
+    }
+    float m_square = l_square - s * s;
+    if (m_square > r_square)
+    {
+        return false;
+    }
+    float q = sqrt(r_square - m_square);
+    tmin = s - q;
+    tmax = s + q;
+    return true;
+}
+
 // Test if a ray with RayFlags and segment <RayTMin(), RayTCurrent()> intersects a hollow sphere.
 bool RaySphereIntersectionTest(in Ray ray, out float thit, out float tmax, out ProceduralPrimitiveAttributes attr, in float3 center = float3(0, 0, 0), in float radius = 1)
 {
