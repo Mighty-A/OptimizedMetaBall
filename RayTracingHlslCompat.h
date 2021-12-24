@@ -64,7 +64,7 @@ struct MetaBallPrimitiveAttributes
 };
 
 
-#define MAX_INDEX_BUFFER_LENGTH 125 // number of balls  
+#define MAX_INDEX_BUFFER_LENGTH 25 // number of balls  
 struct RayPayload
 {
     XMFLOAT4 color;

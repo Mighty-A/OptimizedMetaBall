@@ -215,6 +215,8 @@
     <None Include="MetaBallPrimitives.hlsli" />
     <None Include="packages.config" />
     <None Include="readme.md" />
+    <None Include="util\SceneGen\Cube.py" />
+    <None Include="util\SceneGen\Random.py" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

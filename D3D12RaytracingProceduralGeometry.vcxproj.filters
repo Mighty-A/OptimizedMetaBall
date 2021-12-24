@@ -25,6 +25,9 @@
     <Filter Include="Assets\Shaders\ProceduralPrimitives">
       <UniqueIdentifier>{69efd3aa-04fd-4b1e-be35-61217582c550}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\SceneGen">
+      <UniqueIdentifier>{94f07b25-419b-4fce-93e3-f7417dcc2595}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -113,6 +116,12 @@
     <None Include="packages.config" />
     <None Include="MetaBallPrimitives.hlsli">
       <Filter>Assets\Shaders\ProceduralPrimitives</Filter>
+    </None>
+    <None Include="util\SceneGen\Cube.py">
+      <Filter>Source Files\SceneGen</Filter>
+    </None>
+    <None Include="util\SceneGen\Random.py">
+      <Filter>Source Files\SceneGen</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

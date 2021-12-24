@@ -4,7 +4,7 @@
 #include "RaytracingShaderHelper.hlsli"
 
 #define INTERVAL_REFINEMENT
-#define MAX_METABALLS_PER_CAL 30
+#define MAX_METABALLS_PER_CAL 10
 // MetaBall resources
 					StructuredBuffer<Metaball> g_metaballs : register(t4, space0);
 					
