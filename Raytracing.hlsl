@@ -208,7 +208,7 @@ bool TraceShadowRayAndReportIfHit(in Ray ray, in UINT currentRayRecursionDepth)
     rayDesc.Direction = ray.direction;
     // Set TMin to a zero value to avoid aliasing artifcats along contact areas.
     // Note: make sure to enable back-face culling so as to avoid surface face fighting.
-    rayDesc.TMin = 0.001;
+    rayDesc.TMin = 0.000;
     rayDesc.TMax = 10000;
 
     // Initialize shadow ray payload.

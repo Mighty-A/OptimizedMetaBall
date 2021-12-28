@@ -218,6 +218,13 @@
     <None Include="util\SceneGen\Cube.py" />
     <None Include="util\SceneGen\Random.py" />
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="img\benchmark_without_bvh.png" />
+    <Image Include="img\benchmark_with_bvh.png" />
+    <Image Include="img\final_scene.png" />
+    <Image Include="img\interval_refinement.png" />
+    <Image Include="img\transparent.png" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project=".\packages\WinPixEventRuntime.1.0.180612001\build\WinPixEventRuntime.targets" Condition="Exists('.\packages\WinPixEventRuntime.1.0.180612001\build\WinPixEventRuntime.targets')" />

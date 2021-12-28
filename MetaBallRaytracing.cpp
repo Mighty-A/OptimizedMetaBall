@@ -264,7 +264,7 @@ void MetaBallRaytracing::InitializeScene()
         m_at = { 0.0f, 1.0f, 0.0f, 1.0f };
 #endif
 #ifdef Scene4
-        m_eye = { 0.0f, 5.0f, -5.0f, 1.0f };
+        m_eye = { 0.0f, 2.0f, -4.0f, 1.0f };
         m_at = { 0.0f, 1.0f, 0.0f, 1.0f };
 #endif
         XMVECTOR right = { 1.0f, 0.0f, 0.0f, 0.0f };

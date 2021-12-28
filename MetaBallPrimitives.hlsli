@@ -3,8 +3,7 @@
 
 #include "RaytracingShaderHelper.hlsli"
 
-//#define INTERVAL_REFINEMENT
-#define MAX_METABALLS_PER_CAL 10
+
 // MetaBall resources
 					StructuredBuffer<Metaball> g_metaballs : register(t4, space0);
 					
@@ -122,7 +121,7 @@ bool RayMetaBallPostIntersectionTest(in Ray localRay, in RayPayload payload, out
     UINT iStep = 0;
 	const float Threshold = 0.1f;
 	
-	
+#ifdef PREFER_PERFORMANCE
 	float3 position = localRay.origin + t * localRay.direction;
 	float sumFieldpotential = 0;
 	for (i = 0; i < numOfMetaBalls; i++)
@@ -132,7 +131,9 @@ bool RayMetaBallPostIntersectionTest(in Ray localRay, in RayPayload payload, out
 		sumFieldpotential += tempPotential;
 	}
 	bool fromInside = sumFieldpotential > Threshold;
-	
+#else
+	bool fromInside = false;
+#endif
 	while (iStep++ < MAX_STEPS) 
 	{
 		float3 position = localRay.origin + t * localRay.direction;

@@ -28,6 +28,9 @@
     <Filter Include="Source Files\SceneGen">
       <UniqueIdentifier>{94f07b25-419b-4fce-93e3-f7417dcc2595}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Assets\imgs">
+      <UniqueIdentifier>{95269263-8423-43e3-b1aa-14f94583c2f9}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -128,5 +131,22 @@
     <FxCompile Include="Raytracing.hlsl">
       <Filter>Assets\Shaders</Filter>
     </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="img\final_scene.png">
+      <Filter>Assets\imgs</Filter>
+    </Image>
+    <Image Include="img\benchmark_with_bvh.png">
+      <Filter>Assets\imgs</Filter>
+    </Image>
+    <Image Include="img\benchmark_without_bvh.png">
+      <Filter>Assets\imgs</Filter>
+    </Image>
+    <Image Include="img\interval_refinement.png">
+      <Filter>Assets\imgs</Filter>
+    </Image>
+    <Image Include="img\transparent.png">
+      <Filter>Assets\imgs</Filter>
+    </Image>
   </ItemGroup>
 </Project>
